@@ -4,7 +4,7 @@ tmpMessageFile=".git-tmp-message.txt"
 tmpGemfile="Gemfile"
 tmpVendorDir="vendor"
 
-rm -fr ${tmpMessageFile} ${tmpGemfile} ${tmpGemfile}.lock ${tmpVendorDir} .bundle
+rm -fr ${tmpMessageFile} ${tmpGemfile} ${tmpGemfile}.lock .bundle
 
 set -e
 
