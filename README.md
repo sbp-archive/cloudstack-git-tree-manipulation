@@ -1,5 +1,9 @@
-# cloudstack-git-tree-manipulation
-Examples of git tree manipulation for different development and release scenarios (see [Wiki](https://github.com/schubergphilis/cloudstack-git-tree-manipulation/wiki))
+# CloudStack Git Tree Manipulation
+Examples of git tree manipulation for different development and release scenarios
+
+## Scenarios
+
+For the scenarios and detailed explanations, please see our [Wiki](https://github.com/schubergphilis/cloudstack-git-tree-manipulation/wiki)
 
 ## Using the merge scripts
 
