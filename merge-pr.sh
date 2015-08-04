@@ -66,4 +66,3 @@ git commit --amend -s --allow-empty-message -m ''
 # Clean up
 git branch -D pr/${prId}
 rm -fr ${tmpMessageFile}${tmpGemfile} ${tmpGemfile}.lock ${tmpVendorDir} .bundle
-
