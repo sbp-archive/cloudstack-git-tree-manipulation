@@ -18,9 +18,9 @@
 # under the License.
 
 # Vars we need
-tmpMessageFile=".git-tmp-message.txt"
-tmpGemfile="Gemfile"
-tmpVendorDir="vendor"
+tmpMessageFile="${PWD}/.git-tmp-message.txt"
+tmpGemfile="${PWD}/Gemfile"
+tmpVendorDir="${PWD}/vendor"
 
 # Clean up
 rm -fr ${tmpMessageFile} ${tmpGemfile} ${tmpGemfile}.lock .bundle
