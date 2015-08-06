@@ -45,6 +45,16 @@ prIssue=$(bundle exec ghi show ${prId} | head -n 2)
 prAuthor=$(echo $prIssue | sed -e "s/^[^\@]*//" -e "s/ .*$//")
 prTitle=$(echo $prIssue | sed -e "s/^[^[:alpha:]]*: //" -e "s/ @.*$//")
 
+# Do some sanity checking: we need pr author and title
+if [ ${#prAuthor} -eq 0 ]; then
+  echo "ERROR: We couldn't grab the PR author. Something went wrong using ghi."
+  exit
+fi
+if [ ${#prTitle} -eq 0 ]; then
+  echo "ERROR: We couldn't grab the PR title. Something went wrong using ghi."
+  exit
+fi
+
 # Construct commit merge message
 echo "Merge pull request #${prId} from ${prAuthor}" >> ${tmpMessageFile}
 echo "" >> ${tmpMessageFile}
