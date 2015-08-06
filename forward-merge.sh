@@ -18,7 +18,7 @@
 # under the License.
 
 # Clean up
-tmpMessageFile=".git-tmp-message.txt"
+tmpMessageFile="${PWD}/.git-tmp-message.txt"
 rm -f ${tmpMessageFile}
 
 # Stop executing when we encounter errors
