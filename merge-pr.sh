@@ -17,17 +17,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Vars we need
-tmpMessageFile="${PWD}/.git-tmp-message.txt"
-tmpGemfile="${PWD}/Gemfile"
-tmpVendorDir="${PWD}/vendor"
-
-# Clean up
-rm -fr ${tmpMessageFile} ${tmpGemfile} ${tmpGemfile}.lock .bundle
-
-# Stop executing when we encounter errors
-set -e
-
 # Check if a pull request id was specified
 prId=$1
 if [ -z ${prId} ]; then
@@ -35,30 +24,53 @@ if [ -z ${prId} ]; then
   exit 1
 fi
 
-# Get ghi
-echo "source 'https://rubygems.org'" >> ${tmpGemfile}
-echo "gem 'ghi'" >> ${tmpGemfile}
-bundle install --path=${tmpVendorDir}/bundle --binstubs=${tmpVendorDir}/bin 2>&1 >/dev/null
+# Vars we need
+jsonTmp="${PWD}/${prId}.json"
+tmpMessageFile="${PWD}/.git-tmp-message.txt"
 
-# Get vars from the GigHub API
-prIssue=$(bundle exec ghi show ${prId} | head -n 2)
-prAuthor=$(echo $prIssue | sed -e "s/^[^\@]*//" -e "s/ .*$//")
-prTitle=$(echo $prIssue | sed -e "s/^[^[:alpha:]]*: //" -e "s/ @.*$//")
+# Stop executing when we encounter errors
+set -e
 
-# Do some sanity checking: we need pr author and title
+# We need UTF-8 to support the GitHub '...' 3-dots-in-1-char, for example.
+export LANG="en_EN.UTF-8"
+
+# Get json data from Github API
+curl -s https://api.github.com/repos/apache/cloudstack/pulls/${prId} > ${jsonTmp}
+
+# Get vars from the GitHub API and parse the returned json
+prAuthor=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["user"]["login"].encode("utf-8").decode("ascii","ignore")')
+prTitle=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["title"].encode("utf-8").decode("ascii","ignore")')
+prBody=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["body"].encode("utf-8").decode("ascii","ignore")')
+prOriginBranch=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["head"]["ref"].encode("utf-8").decode("ascii","ignore")')
+prState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["state"]')
+prMergeableState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["mergeable_state"]')
+
+# Do some sanity checking
+if [ "${prState}" != "open" ]; then
+  echo "ERROR: We couldn't merge the PR because the state is not 'open' but '${prState}'."
+  exit
+fi
+if [ "${prMergeableState}" != "clean" ]; then
+  echo "ERROR: We couldn't merge the PR because it cannot be merged 'clean' ('${prMergeableState}')."
+  exit
+fi
 if [ ${#prAuthor} -eq 0 ]; then
-  echo "ERROR: We couldn't grab the PR author. Something went wrong using ghi."
+  echo "ERROR: We couldn't grab the PR author. Something went wrong querying the GitHub API."
   exit
 fi
 if [ ${#prTitle} -eq 0 ]; then
-  echo "ERROR: We couldn't grab the PR title. Something went wrong using ghi."
+  echo "ERROR: We couldn't grab the PR title. Something went wrong querying the GitHub API."
+  exit
+fi
+if [ ${#prOriginBranch} -eq 0 ]; then
+  echo "ERROR: We couldn't grab the PR branch name. Something went wrong querying the GitHub API."
   exit
 fi
 
 # Construct commit merge message
-echo "Merge pull request #${prId} from ${prAuthor}" >> ${tmpMessageFile}
+echo "Merge pull request #${prId} from ${prAuthor}/${prOriginBranch}" > ${tmpMessageFile}
 echo "" >> ${tmpMessageFile}
-echo "${prTitle}" >> ${tmpMessageFile}
+echo "${prTitle}${prBody}" >> ${tmpMessageFile}
 
 # Do the actual merge
 git fetch origin pull/${prId}/head:pr/${prId}
@@ -67,4 +79,4 @@ git commit --amend -s --allow-empty-message -m ''
 
 # Clean up
 git branch -D pr/${prId}
-rm -fr ${tmpMessageFile} ${tmpGemfile} ${tmpGemfile}.lock ${tmpVendorDir} .bundle
+rm ${jsonTmp} ${tmpMessageFile}
