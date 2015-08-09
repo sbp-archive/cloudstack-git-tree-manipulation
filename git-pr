@@ -18,7 +18,17 @@
 # under the License.
 
 # Check if a pull request id was specified
-prId=$1
+argument=$1
+prId=${argument}
+
+# Some of us got used to a git pr alias that you had to feed with the PR url
+# Let's make this script backwards compatible with the previous one.
+if [[ ${argument} =~ https://github.com.* ]]; then
+  prId=$(echo "${argument}" | awk -F/ {'print $7'})
+  echo "Found PR id ${prId} from url"
+fi
+
+# We need the PR number
 if [ -z ${prId} ]; then
   echo "No PR number specified. Quiting."
   exit 1
