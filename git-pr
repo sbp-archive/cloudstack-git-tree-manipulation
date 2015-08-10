@@ -51,7 +51,7 @@ curl -s https://api.github.com/repos/apache/cloudstack/pulls/${prId} > ${jsonTmp
 prAuthor=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["user"]["login"].encode("utf-8").decode("ascii","ignore")')
 prTitle=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["title"].encode("utf-8").decode("ascii","ignore")')
 prBody=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["body"].encode("utf-8").decode("ascii","ignore")')
-prOriginBranch=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["head"]["ref"].encode("utf-8").decode("ascii","ignore")')
+prOriginBranch=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["head"]["label"].encode("utf-8").decode("ascii","ignore")' | sed -e "s/:/\//")
 prState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["state"]')
 prMergeableState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["mergeable_state"]')
 
@@ -79,12 +79,12 @@ fi
 
 # Construct commit merge message
 currentBranch=$(git branch | grep "^*" | sed -e "s/^[*] //")
-echo "Merge pull request #${prId} from ${prAuthor}/${prOriginBranch}" > ${tmpMessageFile}
+echo "Merge pull request #${prId} from ${prOriginBranch}" > ${tmpMessageFile}
 echo "" >> ${tmpMessageFile}
 echo "${prTitle}${prBody}" >> ${tmpMessageFile}
 
 # Are you sure?
-echo "Merging pull request #${prId} from ${prAuthor}/${prOriginBranch} to ${currentBranch} in 5 seconds.."
+echo "Merging pull request #${prId} from ${prOriginBranch} to ${currentBranch} in 5 seconds.."
 sec=5
 while [ $sec -ge 0 ]; do
   echo -n "${sec} "
