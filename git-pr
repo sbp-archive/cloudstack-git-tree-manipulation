@@ -78,9 +78,21 @@ if [ ${#prOriginBranch} -eq 0 ]; then
 fi
 
 # Construct commit merge message
+currentBranch=$(git branch | grep "^*" | sed -e "s/^[*] //")
 echo "Merge pull request #${prId} from ${prAuthor}/${prOriginBranch}" > ${tmpMessageFile}
 echo "" >> ${tmpMessageFile}
 echo "${prTitle}${prBody}" >> ${tmpMessageFile}
+
+# Are you sure?
+echo "Merging pull request #${prId} from ${prAuthor}/${prOriginBranch} to ${currentBranch} in 5 seconds.."
+sec=5
+while [ $sec -ge 0 ]; do
+  echo -n "${sec} "
+  sec=$((sec-1))
+  sleep 1
+done
+echo "There we go!"
+echo "***********************************************************************************"
 
 # Do the actual merge
 git fetch origin pull/${prId}/head:pr/${prId}
@@ -90,3 +102,7 @@ git commit --amend -s --allow-empty-message -m ''
 # Clean up
 git branch -D pr/${prId}
 rm ${jsonTmp} ${tmpMessageFile}
+
+# What's next
+echo "***********************************************************************************"
+echo "We're done! Please double check using 'git log -p' and 'git push' when you're sure."

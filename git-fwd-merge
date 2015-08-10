@@ -17,9 +17,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Clean up
+# Var
 tmpMessageFile="${PWD}/.git-tmp-message.txt"
-rm -f ${tmpMessageFile}
 
 # Stop executing when we encounter errors
 set -e
@@ -33,10 +32,23 @@ fi
 
 # Construct merge message
 currentBranch=$(git branch | grep "^*" | sed -e "s/^[*] //")
-echo "Merge fix release ${branch} to ${currentBranch}" >> ${tmpMessageFile}
+echo "Merge release branch ${branch} to ${currentBranch}" > ${tmpMessageFile}
+
+# Are you sure?
+echo "Merging release branch ${branch} to ${currentBranch} in 5 seconds.."
+sec=5
+while [ $sec -ge 0 ]; do
+  echo -n "${sec} "
+  sec=$((sec-1))
+  sleep 1
+done
+echo "There we go!"
 
 # Do the actual merge
 git merge --no-ff --log -m "$(cat .git-tmp-message.txt)" ${branch}
 
 # Clean up
 rm -fr ${tmpMessageFile}
+
+# What's next
+echo "We're done! Please double check using 'git log -p' and 'git push' when you're sure."
