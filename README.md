@@ -13,15 +13,23 @@ This script can be used to merge a pull request from a GitHub into the current l
 
 Requirements: basic Python (sys/json modules) and bash
 
-The script takes the pull request number (a.k.a. id) as its only argument.
+The script takes the pull request number (or the pull request URL) as its only argument.
 ```bash
 git-pr 1
+```
+or
+```bash
+git-pr https://github.com/apache/cloudstack/pull/1
 ```
 
 If you put this script in your $PATH, or add the directory to the $PATH, you'll be able to use it like this:
 
 ```bash
 git pr 1
+```
+or
+```bash
+git-pr https://github.com/apache/cloudstack/pull/1
 ```
 
 
