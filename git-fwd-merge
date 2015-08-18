@@ -20,13 +20,11 @@
 # Var
 tmpMessageFile="${PWD}/.git-tmp-message.txt"
 
-# Stop executing when we encounter errors
-set -e
-
 # Check if branch was specified
 branch=$1
 if [ -z ${branch} ]; then
-  echo "No branch specified. Quiting."
+  echo "Usage: git fwd-merge branch-name"
+  echo
   exit 1
 fi
 
@@ -35,7 +33,7 @@ currentBranch=$(git branch | grep "^*" | sed -e "s/^[*] //")
 echo "Merge release branch ${branch} to ${currentBranch}" > ${tmpMessageFile}
 
 # Are you sure?
-echo "Merging release branch ${branch} to ${currentBranch} in 5 seconds.."
+echo "Merging release branch ***${branch}*** into ***${currentBranch}*** branch in 5 seconds. CTRL+c to abort.."
 sec=5
 while [ $sec -ge 0 ]; do
   echo -n "${sec} "
@@ -46,6 +44,10 @@ echo "There we go!"
 
 # Do the actual merge
 git merge --no-ff --log -m "$(cat .git-tmp-message.txt)" ${branch}
+if [ $? -gt 0 ]; then
+  echo "ERROR: Merge failed, aborting."
+  git merge --abort
+fi
 
 # Clean up
 rm -fr ${tmpMessageFile}

@@ -17,9 +17,22 @@
 # specific language governing permissions and limitations
 # under the License.
 
+clean_up_and_exit() {
+  echo
+  git branch -D pr/${prId} >/dev/null 2>&1
+  rm ${jsonTmp} ${tmpMessageFile} >/dev/null 2>&1
+  exit $1
+}
+
 # Check if a pull request id was specified
 argument=$1
 prId=${argument}
+
+# Force parameter
+force=0
+if [[ "${2}" == "--force" ]]; then
+  force=1
+fi
 
 # Some of us got used to a git pr alias that you had to feed with the PR url
 # Let's make this script backwards compatible with the previous one.
@@ -30,51 +43,59 @@ fi
 
 # We need the PR number
 if [ -z ${prId} ]; then
-  echo "No PR number specified. Quiting."
-  exit 1
+  echo "Usage: git pr pool-request-number [ --force ]"
+  clean_up_and_exit 1
 fi
 
 # Vars we need
 jsonTmp="${PWD}/${prId}.json"
 tmpMessageFile="${PWD}/.git-tmp-message.txt"
 
-# Stop executing when we encounter errors
-set -e
-
 # We need UTF-8 to support the GitHub '...' 3-dots-in-1-char, for example.
 export LANG="en_EN.UTF-8"
 
-# Get json data from Github API
-curl -s https://api.github.com/repos/apache/cloudstack/pulls/${prId} > ${jsonTmp}
+if [ "${prId}" -eq "${prId}" 2>/dev/null ]; then
+  # Get json data from Github API
+  curl -s https://api.github.com/repos/apache/cloudstack/pulls/${prId} > ${jsonTmp}
+else
+  echo "ERROR: Pull-request id must be an integer, not '${prId}'"
+  clean_up_and_exit 1
+fi
 
 # Get vars from the GitHub API and parse the returned json
-prAuthor=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["user"]["login"].encode("utf-8").decode("ascii","ignore")')
-prTitle=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["title"].encode("utf-8").decode("ascii","ignore")')
-prBody=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["body"].encode("utf-8").decode("ascii","ignore")')
-prOriginBranch=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["head"]["label"].encode("utf-8").decode("ascii","ignore")' | sed -e "s/:/\//")
-prState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["state"]')
-prMergeableState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["mergeable_state"]')
+prAuthor=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["user"]["login"].encode("utf-8").decode("ascii","ignore")' >/dev/null 2&>1)
+prTitle=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["title"].encode("utf-8").decode("ascii","ignore")' >/dev/null 2&>1)
+prBody=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["body"].encode("utf-8").decode("ascii","ignore")' >/dev/null 2&>1)
+prOriginBranch=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["head"]["label"].encode("utf-8").decode("ascii","ignore")' >/dev/null 2&>1 | sed -e "s/:/\//")
+prState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["state"]' >/dev/null 2&>1)
+prMergeableState=$(cat ${jsonTmp} | python -c 'import sys, json; print json.load(sys.stdin)["mergeable_state"]' >/dev/null 2&>1)
 
 # Do some sanity checking
-if [ "${prState}" != "open" ]; then
-  echo "ERROR: We couldn't merge the PR because the state is not 'open' but '${prState}'."
-  exit
-fi
-if [ "${prMergeableState}" != "clean" ]; then
-  echo "ERROR: We couldn't merge the PR because it cannot be merged 'clean' ('${prMergeableState}')."
-  exit
-fi
 if [ ${#prAuthor} -eq 0 ]; then
   echo "ERROR: We couldn't grab the PR author. Something went wrong querying the GitHub API."
-  exit
+  clean_up_and_exit 1
 fi
 if [ ${#prTitle} -eq 0 ]; then
   echo "ERROR: We couldn't grab the PR title. Something went wrong querying the GitHub API."
-  exit
+  clean_up_and_exit 1
 fi
 if [ ${#prOriginBranch} -eq 0 ]; then
   echo "ERROR: We couldn't grab the PR branch name. Something went wrong querying the GitHub API."
-  exit
+  clean_up_and_exit 1
+fi
+if [ "${prState}" != "open" ] && [ ${force} -lt 1 ]; then
+  echo "ERROR: We couldn't merge the PR because the state is not 'open' but '${prState}'."
+  echo "Please do NOT merge closed PRs!"
+  echo "Run this script again with --force if you know what you're doing"
+  echo "(continuing work on an abandoned PR in which case you'd merge to a branch in your fork"
+  echo "and send that as a new PR). Ask for help on @dev if unsure."
+  clean_up_and_exit 1
+fi
+if [ "${prMergeableState}" != "clean" ] && [ ${force} -lt 1 ]; then
+  echo "ERROR: We couldn't merge the PR because it cannot be merged 'clean' (GitHub reports '${prMergeableState}')."
+  echo "This can be caused by a Travis build in progress, a failed Travis build or an unclean merge (conflicts)"
+  echo "Run this script again with --force if you know what you're doing. Ask for help on @dev if unsure."
+  clean_up_and_exit 1
 fi
 
 # Construct commit merge message
@@ -84,7 +105,7 @@ echo "" >> ${tmpMessageFile}
 echo "${prTitle}${prBody}" >> ${tmpMessageFile}
 
 # Are you sure?
-echo "Merging pull request #${prId} from ${prOriginBranch} to ${currentBranch} in 5 seconds.."
+echo "Merging pull request #${prId} from ${prOriginBranch} into ***${currentBranch}*** branch in 5 seconds. CTRL+c to abort.."
 sec=5
 while [ $sec -ge 0 ]; do
   echo -n "${sec} "
@@ -97,11 +118,14 @@ echo "**************************************************************************
 # Do the actual merge
 git fetch origin pull/${prId}/head:pr/${prId}
 git merge --no-ff --log -m "$(cat .git-tmp-message.txt)" pr/${prId}
-git commit --amend -s --allow-empty-message -m ''
+if [ $? -eq 0 ]; then
+  git commit --amend -s --allow-empty-message -m ''
+else
+  echo "ERROR: Merge failed, aborting."
+  git merge --abort
+fi
 
-# Clean up
-git branch -D pr/${prId}
-rm ${jsonTmp} ${tmpMessageFile}
+clean_up_and_exit 0
 
 # What's next
 echo "***********************************************************************************"
