@@ -41,7 +41,7 @@ fi
 # Let's make this script backwards compatible with the previous one.
 if [[ ${argument} =~ https://github.com.* ]]; then
   prId=$(echo "${argument}" | awk -F/ {'print $7'})
-  echo "Found PR id ${prId} from url"
+  echo "INFO: Found PR id ${prId} from url"
 fi
 
 # Check the arguments
@@ -114,6 +114,14 @@ except:
   print 'Unknown'
 ")
 
+prDestinationBranch=$(cat ${jsonTmp} | python -c "
+try:
+  import sys, json
+  print json.load(sys.stdin)['base']['ref'].encode('utf-8').decode('ascii','ignore')
+except:
+  print 'Unknown'
+")
+
 prCommits=$(cat ${jsonTmp} | python -c "
 try:
   import sys, json
@@ -138,45 +146,62 @@ if [ ${#prOriginBranch} -eq 0 ]; then
   clean_up_and_exit 1
 fi
 
+currentBranch=$(git branch | grep "^*" | sed -e "s/^[*] //")
+if [ "${prDestinationBranch}" != "${currentBranch}" ] && [ ${force} -lt 1 ]; then
+  echo "ERROR: This PR is made against branch '${prDestinationBranch}' while your current checked out branch is '${currentBranch}'."
+  echo "ERROR: Please make sure you're in the right branch and run this scipt again."
+  clean_up_and_exit 1
+elif [ "${prDestinationBranch}" != "${currentBranch}" ] && [ ${force} -eq 1 ]; then
+  echo "WARNING: You used --force to merge to '${currentBranch}' while this PR is for branch '${prDestinationBranch}'."
+fi
+
 if [ "${prState}" != "open" ] && [ ${force} -lt 1 ]; then
   echo "ERROR: We couldn't merge the PR because the state is not 'open' but '${prState}'."
-  echo "Please do NOT merge closed PRs!"
-  echo "Run this script again with --force if you know what you're doing"
-  echo "(continuing work on an abandoned PR in which case you'd merge to a branch in your fork"
-  echo "and send that as a new PR). Ask for help on @dev if unsure."
+  echo "ERROR: In general it's a bad idea to merge closed PRs!"
+  echo "ERROR: Run this script again with --force if you know what you're doing"
+  echo "ERROR: (continuing work on an abandoned PR in which case you'd merge to a branch in your fork"
+  echo "ERROR: and send that as a new PR). Ask for help on @dev if unsure."
   clean_up_and_exit 1
+elif [ "${prState}" != "open" ] &&[ ${force} -eq 1 ]; then
+  echo "WARNING: You used --force to merge a PR with state '${prState}'."
 fi
 
 if [ "${prMergeableState}" != "clean" ] && [ ${force} -lt 1 ]; then
   echo "ERROR: We couldn't merge the PR because it cannot be merged 'clean' (GitHub reports '${prMergeableState}')."
-  echo "This can be caused by a Travis build in progress, a failed Travis build or an unclean merge (conflicts)"
-  echo "Run this script again with --force if you know what you're doing. Ask for help on @dev if unsure."
+  echo "ERROR: This can be caused by a Travis build in progress, a failed Travis build or an unclean merge (conflicts)"
+  echo "ERROR: Run this script again with --force if you know what you're doing. Ask for help on @dev if unsure."
+  clean_up_and_exit 1
+elif [ "${prMergeableState}" != "clean" ] && [ ${force} -eq 1 ]; then
+  echo "WARNING: You used --force to merge a PR with non-clean merge state '${prMergeableState}'."
+fi
+
+github_remote=$(git remote -v | grep "apache/cloudstack.git" | head -n 1 | cut -f1)
+if [ ${#github_remote} -eq 0 ]; then
+  echo "ERROR: We couldn't find a git remote pointing to 'apache/cloudstack.git' to merge the PR from."
+  echo "INFO: Current remotes:"
+  git remote -v
   clean_up_and_exit 1
 fi
 
+echo "INFO: Using remote repository '${github_remote}' to fetch PR (should point to github.com/apache/cloudstack.git)"
+echo "INFO: PR #${prId} against branch '${prDestinationBranch}' from '${prAuthor}': '${prTitle}'"
+echo "INFO: has state '${prState}' and mergable state '${prMergeableState}', about to be merged in branch '${currentBranch}'."
+
 # Construct commit merge message
-currentBranch=$(git branch | grep "^*" | sed -e "s/^[*] //")
 echo "Merge pull request #${prId} from ${prOriginBranch}" > ${tmpMessageFile}
 echo "" >> ${tmpMessageFile}
 echo "${prTitle}${prBody}" >> ${tmpMessageFile}
 
-github_remote=$(git remote -v | grep "apache/cloudstack.git" | head -n 1 | cut -f1)
-if [ ${#github_remote} -eq 0 ]; then
-    echo "ERROR: We couldn't find a git remote pointing to 'apache/cloudstack.git' to merge the PR from."
-    clean_up_and_exit 1
-fi
-
 # Are you sure?
-echo "Merging pull request #${prId} from ${prOriginBranch} into ***${currentBranch}*** branch in 5 seconds. CTRL+c to abort.."
-echo "Using remote repository '${github_remote}' to fetch PR (should point to GitHub)"
+echo "ATTENTION: Merging pull request #${prId} from ${prOriginBranch} into '${currentBranch}' branch in 5 seconds. CTRL+c to abort.."
 sec=5
 while [ $sec -ge 0 ]; do
   echo -n "${sec} "
   sec=$((sec-1))
   sleep 1
 done
-echo "There we go!"
-echo "***********************************************************************************"
+echo "INFO: Executing the merge now.. Git output below:"
+echo "INFO: ***********************************************************************************"
 
 # Do the actual merge
 git fetch ${github_remote} pull/${prId}/head:pr/${prId}
@@ -189,9 +214,9 @@ else
 fi
 
 # What's next
-echo "***********************************************************************************"
-echo "We're done! Please double check using 'git log -p' and 'git push' when you're sure."
-echo "Commits: there should be ${prCommits} from the PR plus 1 merge commit."
+echo "INFO: ***********************************************************************************"
+echo "INFO: Merged successfully! Please double check using 'git log -p' and 'git push' when you're sure."
+echo "INFO: About commits: there should be ${prCommits} from the PR plus 1 merge commit."
 echo
 
 clean_up_and_exit 0
